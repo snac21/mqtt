@@ -1,8 +1,8 @@
 package web
 
 import (
-	"gitee.com/snac21/mqtt/logger"
 	"github.com/gin-gonic/gin"
+	"github.com/snac21/mqtt/logger"
 )
 
 // Server represents the web management server

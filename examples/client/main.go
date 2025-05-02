@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"gitee.com/snac21/mqtt/proto"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/snac21/mqtt/proto"
 	pb "google.golang.org/protobuf/proto"
 )
 

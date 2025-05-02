@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
-	"gitee.com/snac21/mqtt/handlers"
-	"gitee.com/snac21/mqtt/logger"
-	"gitee.com/snac21/mqtt/storage"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
+	"github.com/snac21/mqtt/handlers"
+	"github.com/snac21/mqtt/logger"
+	"github.com/snac21/mqtt/storage"
 )
 
 // Broker represents the MQTT broker instance

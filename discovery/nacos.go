@@ -3,11 +3,11 @@ package discovery
 import (
 	"fmt"
 
-	"gitee.com/snac21/mqtt/logger"
 	"github.com/nacos-group/nacos-sdk-go/clients"
 	"github.com/nacos-group/nacos-sdk-go/clients/naming_client"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/vo"
+	"github.com/snac21/mqtt/logger"
 )
 
 // NacosDiscovery implements service discovery using Nacos

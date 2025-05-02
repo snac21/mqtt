@@ -1,4 +1,4 @@
-module gitee.com/snac21/mqtt
+module github.com/snac21/mqtt
 
 go 1.21
 

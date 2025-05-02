@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mqtt;
 
-option go_package = "gitee.com/snac21/mqtt/proto";
+option go_package = "github.com/snac21/mqtt/proto";
 
 // MessageType defines the type of MQTT message
 enum MessageType {

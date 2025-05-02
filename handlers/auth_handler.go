@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"gitee.com/snac21/mqtt/proto"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/packets"
+	"github.com/snac21/mqtt/proto"
 	pb "google.golang.org/protobuf/proto"
 )
 

@@ -67,7 +67,7 @@ mqtt-clz/
 
 1. Clone the repository:
 ```bash
-git clone https://gitee.com/snac21/mqtt.git
+git clone https://github.com/snac21/mqtt.git
 cd mqtt
 ```
 

@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gitee.com/snac21/mqtt/broker"
-	"gitee.com/snac21/mqtt/discovery"
-	"gitee.com/snac21/mqtt/logger"
-	"gitee.com/snac21/mqtt/web"
+	"github.com/snac21/mqtt/broker"
+	"github.com/snac21/mqtt/discovery"
+	"github.com/snac21/mqtt/logger"
+	"github.com/snac21/mqtt/web"
 )
 
 func main() {

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"gitee.com/snac21/mqtt/logger"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/packets"
+	"github.com/snac21/mqtt/logger"
 )
 
 // InfluxDBStorage implements mqtt.Hook interface for message storage
