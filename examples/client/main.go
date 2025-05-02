@@ -11,7 +11,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/snac21/mqtt/proto"
+	"github.com/snac21/mqtt/pkg/proto"
 	pb "google.golang.org/protobuf/proto"
 )
 
@@ -45,14 +45,14 @@ func main() {
 	}
 	defer client.Disconnect(250)
 
-	// Subscribe to topics
-	if token := client.Subscribe("data/ack/#", 0, func(client mqtt.Client, msg mqtt.Message) {
-		var ack proto.DataMessage
-		if err := pb.Unmarshal(msg.Payload(), &ack); err != nil {
-			log.Printf("Failed to parse acknowledgment: %v", err)
+	// Subscribe to response topics
+	if token := client.Subscribe("response/#", 0, func(client mqtt.Client, msg mqtt.Message) {
+		var response proto.BaseMessage
+		if err := pb.Unmarshal(msg.Payload(), &response); err != nil {
+			log.Printf("Failed to parse response: %v", err)
 			return
 		}
-		log.Printf("Received acknowledgment for device %s", ack.DeviceId)
+		log.Printf("Received response from client %s", response.ClientId)
 	}); token.Wait() && token.Error() != nil {
 		log.Fatalf("Failed to subscribe: %v", token.Error())
 	}
@@ -71,22 +71,26 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// Create data message
-				dataMsg := &proto.DataMessage{
-					DeviceId:  *clientID,
-					Data:      []byte(fmt.Sprintf("Hello from %s at %v", *clientID, time.Now())),
+				// Create status message
+				statusMsg := &proto.StatusMessage{
+					ClientId: *clientID,
+					Status:   "online",
+					Metrics: map[string]string{
+						"battery": "100",
+						"signal":  "90",
+					},
 					Timestamp: time.Now().Unix(),
 				}
 
 				// Marshal message
-				data, err := pb.Marshal(dataMsg)
+				data, err := pb.Marshal(statusMsg)
 				if err != nil {
 					log.Printf("Failed to marshal message: %v", err)
 					continue
 				}
 
 				// Publish message
-				topic := fmt.Sprintf("data/%s", *clientID)
+				topic := fmt.Sprintf("status/%s", *clientID)
 				if token := client.Publish(topic, 0, false, data); token.Wait() && token.Error() != nil {
 					log.Printf("Failed to publish message: %v", token.Error())
 				}

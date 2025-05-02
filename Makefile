@@ -1,43 +1,44 @@
-.PHONY: build clean proto deps test
+.PHONY: all build clean test proto run deps lint
 
-# Variables
+# Build settings
 BINARY_NAME=mqtt-broker
-PROTO_DIR=proto
 GO=go
 PROTOC=protoc
 
 # Build flags
-LDFLAGS=-ldflags "-w -s"
+LDFLAGS=-ldflags "-s -w"
 
-all: deps proto build
-
-deps:
-	$(GO) mod download
-	$(GO) mod tidy
-
-proto:
-	@echo "Generating protobuf files..."
-	$(PROTOC) --go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		$(PROTO_DIR)/*.proto
+all: clean build
 
 build:
 	@echo "Building binary..."
+	@mkdir -p bin
 	$(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) cmd/main.go
 
 clean:
-	@echo "Cleaning..."
+	@echo "Cleaning up..."
 	rm -rf bin/
-	rm -rf proto/*.pb.go
+	rm -f pkg/proto/*.pb.go
 
 test:
+	@echo "Running tests..."
 	$(GO) test -v ./...
 
+proto:
+	@echo "Generating protobuf code..."
+	$(PROTOC) --go_out=. --go_opt=paths=source_relative pkg/proto/message.proto
+
 run: build
+	@echo "Running broker..."
 	./bin/$(BINARY_NAME)
 
-docker-build:
-	docker build -t mqtt-broker .
+deps:
+	@echo "Installing dependencies..."
+	$(GO) mod download
+	$(GO) mod tidy
 
-docker-run:
-	docker run -p 1883:1883 -p 8080:8080 mqtt-broker 
+lint:
+	@echo "Running linter..."
+	golangci-lint run
+
+.DEFAULT_GOAL := build 

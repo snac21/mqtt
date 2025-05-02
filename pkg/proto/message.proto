@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/snac21/mqtt/pkg/proto";
+
+// BaseMessage represents a generic MQTT message
+message BaseMessage {
+    string client_id = 1;
+    int64 timestamp = 2;
+    bytes payload = 3;
+    string type = 4;
+    map<string, string> metadata = 5;
+}
+
+// AuthMessage represents an authentication message
+message AuthMessage {
+    string username = 1;
+    string password = 2;
+    bool success = 3;
+    int64 timestamp = 4;
+}
+
+// ControlMessage represents a control message
+message ControlMessage {
+    string command = 1;
+    string status = 2;
+    map<string, string> parameters = 3;
+    int64 timestamp = 4;
+}
+
+// StatusMessage represents a status message
+message StatusMessage {
+    string client_id = 1;
+    string status = 2;
+    map<string, string> metrics = 3;
+    int64 timestamp = 4;
+}
+
+// DataMessage represents a data message
+message DataMessage {
+    string client_id = 1;
+    string data_type = 2;
+    bytes payload = 3;
+    map<string, string> metadata = 4;
+    int64 timestamp = 5;
+} 

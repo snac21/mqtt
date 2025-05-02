@@ -7,18 +7,15 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/snac21/mqtt/broker"
-	"github.com/snac21/mqtt/discovery"
-	"github.com/snac21/mqtt/logger"
-	"github.com/snac21/mqtt/web"
+	"github.com/snac21/mqtt/internal/broker"
+	"github.com/snac21/mqtt/internal/logger"
+	"github.com/snac21/mqtt/internal/web"
 )
 
 func main() {
 	// Parse command line flags
 	port := flag.Int("port", 1883, "MQTT broker port")
 	webPort := flag.String("web-port", ":8080", "Web management interface port")
-	nacosAddr := flag.String("nacos-addr", "localhost", "Nacos server address")
-	nacosPort := flag.Uint64("nacos-port", 8848, "Nacos server port")
 	influxURL := flag.String("influx-url", "http://localhost:8086", "InfluxDB URL")
 	influxToken := flag.String("influx-token", "", "InfluxDB token")
 	influxOrg := flag.String("influx-org", "mqtt", "InfluxDB organization")
@@ -26,18 +23,13 @@ func main() {
 	flag.Parse()
 
 	// Initialize logger
-	log := logger.New()
+	log := logger.New(&logger.Config{
+		Level: "info",
+	})
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Initialize Nacos discovery
-	discovery, err := discovery.NewNacosDiscovery(*nacosAddr, *nacosPort)
-	if err != nil {
-		log.Error("Failed to initialize Nacos discovery", err)
-		os.Exit(1)
-	}
 
 	// Create and start MQTT broker
 	broker, err := broker.New(&broker.Config{
@@ -49,7 +41,7 @@ func main() {
 		InfluxToken:  *influxToken,
 		InfluxOrg:    *influxOrg,
 		InfluxBucket: *influxBucket,
-	})
+	}, log)
 	if err != nil {
 		log.Error("Failed to create MQTT broker", err)
 		os.Exit(1)
@@ -62,15 +54,8 @@ func main() {
 	}
 	defer broker.Stop()
 
-	// Register with Nacos
-	if err := discovery.RegisterService("mqtt-broker", "localhost", uint64(*port)); err != nil {
-		log.Error("Failed to register with Nacos", err)
-		os.Exit(1)
-	}
-	defer discovery.DeregisterService("mqtt-broker", "localhost", uint64(*port))
-
 	// Start web server
-	webServer := web.NewServer()
+	webServer := web.NewServer(broker, log)
 	go func() {
 		if err := webServer.Start(*webPort); err != nil {
 			log.Error("Failed to start web server", err)
