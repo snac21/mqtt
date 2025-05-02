@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/snac21/mqtt/internal/broker"
+	"github.com/snac21/mqtt/internal/config"
 	"github.com/snac21/mqtt/internal/logger"
 	"github.com/snac21/mqtt/internal/web"
 )
@@ -32,16 +33,24 @@ func main() {
 	defer cancel()
 
 	// Create and start MQTT broker
-	broker, err := broker.New(&broker.Config{
-		Port:         *port,
-		Auth:         false, // TODO: Make configurable
-		Username:     "",
-		Password:     "",
-		InfluxURL:    *influxURL,
-		InfluxToken:  *influxToken,
-		InfluxOrg:    *influxOrg,
-		InfluxBucket: *influxBucket,
-	}, log)
+	cfg := &config.Config{
+		Broker: config.BrokerConfig{
+			Port: *port,
+			Auth: config.AuthConfig{
+				Enabled:  false, // TODO: Make configurable
+				Username: "",
+				Password: "",
+			},
+		},
+		Storage: config.StorageConfig{
+			URL:          *influxURL,
+			Token:        *influxToken,
+			Organization: *influxOrg,
+			Bucket:       *influxBucket,
+		},
+	}
+
+	broker, err := broker.New(cfg, log)
 	if err != nil {
 		log.Error("Failed to create MQTT broker", err)
 		os.Exit(1)
