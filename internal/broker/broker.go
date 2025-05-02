@@ -219,30 +219,26 @@ func (b *Broker) RegisterHandler(handler handlers.MessageHandler) {
 	b.handlers[handler.Type()] = handler
 }
 
-// initializeHandlers initializes default message handlers
+// initializeHandlers initializes message handlers
 func (b *Broker) initializeHandlers() error {
-	// Create server instance for handlers
-	server := &mqttServer{
-		server: b.server,
-	}
+	// 创建路由处理器
+	router := handlers.NewRouter()
 
-	// Initialize handlers with server instance
-	handlers := []handlers.MessageHandler{
-		handlers.NewAuthHandler(server),
-		handlers.NewControlHandler(server),
-		handlers.NewDataHandler(server),
-		handlers.NewStatusHandler(server),
-	}
-
-	for _, handler := range handlers {
-		b.RegisterHandler(handler)
-	}
-
-	// Add event hook for message handling
-	eventHook := hooks.NewEventHook()
+	// 注册所有处理器到路由
 	for _, handler := range b.handlers {
-		eventHook.RegisterHandler(handler)
+		router.RegisterHandler(handler)
 	}
+
+	// 创建事件钩子
+	eventHook, err := hooks.NewEventHook()
+	if err != nil {
+		return fmt.Errorf("failed to create event hook: %w", err)
+	}
+
+	// 设置路由处理器
+	eventHook.SetRouter(router)
+
+	// 添加事件钩子到服务器
 	if err := b.server.AddHook(eventHook, nil); err != nil {
 		return fmt.Errorf("failed to add event hook: %w", err)
 	}
