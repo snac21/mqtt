@@ -1,0 +1,38 @@
+# MQTT Broker Configuration
+broker:
+  port: 1883
+  auth: false
+  username: ""
+  password: ""
+
+# Web Server Configuration
+web:
+  port: ":8080"
+
+# Service Discovery Configuration
+discovery:
+  provider: "nacos"
+  nacos:
+    address: "localhost"
+    port: 8848
+
+# Storage Configuration
+storage:
+  provider: "influxdb"
+  influxdb:
+    url: "http://localhost:8086"
+    token: "your-token-here"
+    org: "mqtt"
+    bucket: "mqtt"
+
+# Logging Configuration
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  port: ":9090"
+  path: "/metrics" 
