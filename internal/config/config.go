@@ -35,8 +35,15 @@ type WebConfig struct {
 
 // DiscoveryConfig represents service discovery configuration
 type DiscoveryConfig struct {
-	Address string `yaml:"address"`
-	Port    uint64 `yaml:"port"`
+	Type      string `yaml:"type"`
+	Address   string `yaml:"address"`
+	Port      uint64 `yaml:"port"`
+	Namespace string `yaml:"namespace"`
+	Group     string `yaml:"group"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+	Token     string `yaml:"token"`
+	Scheme    string `yaml:"scheme"`
 }
 
 // StorageConfig represents storage configuration

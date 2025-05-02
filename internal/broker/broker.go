@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
-	mqttserver "github.com/mochi-mqtt/server/v2"
+	"github.com/google/uuid"
+	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/hooks/auth"
 	"github.com/mochi-mqtt/server/v2/listeners"
+	"github.com/snac21/mqtt/internal/config"
+	"github.com/snac21/mqtt/internal/discovery"
 	"github.com/snac21/mqtt/internal/handlers"
 	"github.com/snac21/mqtt/internal/hooks"
 	"github.com/snac21/mqtt/internal/logger"
@@ -15,66 +19,47 @@ import (
 
 // Broker represents the MQTT broker
 type Broker struct {
-	server   *mqttserver.Server
-	config   *Config
+	server   *mqtt.Server
+	config   *config.Config
 	storage  *hooks.InfluxDBHook
 	handlers map[string]handlers.MessageHandler
+	registry discovery.Registry
 	mu       sync.RWMutex
 	logger   *logger.Logger
 }
 
-// Config represents broker configuration
-type Config struct {
-	Port         int
-	Auth         bool
-	Username     string
-	Password     string
-	InfluxURL    string
-	InfluxToken  string
-	InfluxOrg    string
-	InfluxBucket string
-}
-
 // New creates a new MQTT broker instance
-func New(config *Config, logger *logger.Logger) (*Broker, error) {
+func New(cfg *config.Config, logger *logger.Logger) (*Broker, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
 
 	// Create new MQTT server with default options
-	server := mqttserver.New(&mqttserver.Options{
+	server := mqtt.New(&mqtt.Options{
 		InlineClient: true,
 	})
 
 	// Create broker instance
 	broker := &Broker{
 		server:   server,
-		config:   config,
+		config:   cfg,
 		handlers: make(map[string]handlers.MessageHandler),
 		logger:   logger,
 	}
 
-	// Initialize storage
-	if config.InfluxURL != "" {
-		storage, err := hooks.NewInfluxDBHook(config.InfluxURL, config.InfluxToken, config.InfluxOrg, config.InfluxBucket)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize storage: %w", err)
-		}
-		broker.storage = storage
-		if err := server.AddHook(storage, nil); err != nil {
-			return nil, fmt.Errorf("failed to add storage hook: %w", err)
-		}
+	// Initialize components
+	if err := broker.initializeRegistry(); err != nil {
+		return nil, fmt.Errorf("failed to initialize registry: %w", err)
 	}
 
-	// Configure authentication if enabled
-	if config.Auth {
-		authHook := &auth.AllowHook{}
-		if err := server.AddHook(authHook, nil); err != nil {
-			return nil, fmt.Errorf("failed to add auth hook: %w", err)
-		}
+	if err := broker.initializeStorage(); err != nil {
+		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
-	// Initialize message handlers
+	if err := broker.initializeAuth(); err != nil {
+		return nil, fmt.Errorf("failed to initialize auth: %w", err)
+	}
+
 	if err := broker.initializeHandlers(); err != nil {
 		return nil, fmt.Errorf("failed to initialize handlers: %w", err)
 	}
@@ -82,15 +67,128 @@ func New(config *Config, logger *logger.Logger) (*Broker, error) {
 	return broker, nil
 }
 
+// initializeRegistry initializes the service registry
+func (b *Broker) initializeRegistry() error {
+	if b.config.Discovery.Address == "" {
+		return nil
+	}
+
+	var registry discovery.Registry
+	var err error
+
+	// Create service instance
+	instance := &discovery.ServiceInstance{
+		ID:   fmt.Sprintf("%d", b.config.Broker.Port),
+		Name: "mqtt-broker",
+		Host: b.config.Discovery.Address,
+		Port: int(b.config.Discovery.Port),
+		Metadata: map[string]string{
+			"version": "1.0.0",
+		},
+	}
+
+	// Initialize registry based on configuration
+	switch b.config.Discovery.Type {
+	case "nacos":
+		nacosConfig := &config.NacosConfig{
+			ServerAddr: b.config.Discovery.Address,
+			Namespace:  b.config.Discovery.Namespace,
+			Group:      b.config.Discovery.Group,
+			Username:   b.config.Discovery.Username,
+			Password:   b.config.Discovery.Password,
+		}
+		registry, err = discovery.NewNacosRegistry(nacosConfig)
+	case "consul":
+		consulConfig := &config.ConsulConfig{
+			Address: b.config.Discovery.Address,
+			Token:   b.config.Discovery.Token,
+			Scheme:  b.config.Discovery.Scheme,
+		}
+		registry, err = discovery.NewConsulRegistry(consulConfig)
+	default:
+		return fmt.Errorf("unsupported registry type: %s", b.config.Discovery.Type)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize registry: %w", err)
+	}
+
+	// Register service with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := registry.Register(ctx, instance); err != nil {
+		return fmt.Errorf("failed to register service: %w", err)
+	}
+
+	b.registry = registry
+	return nil
+}
+
+// initializeStorage initializes the storage hook
+func (b *Broker) initializeStorage() error {
+	if b.config.Storage.URL == "" {
+		return nil
+	}
+
+	storage, err := hooks.NewInfluxDBHook(
+		b.config.Storage.URL,
+		b.config.Storage.Token,
+		b.config.Storage.Organization,
+		b.config.Storage.Bucket,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize storage: %w", err)
+	}
+
+	b.storage = storage
+	return b.server.AddHook(storage, nil)
+}
+
+// initializeAuth initializes the authentication hook
+func (b *Broker) initializeAuth() error {
+	if !b.config.Broker.Auth.Enabled {
+		return nil
+	}
+
+	authHook := &auth.AllowHook{}
+	return b.server.AddHook(authHook, nil)
+}
+
 // Start starts the MQTT broker
 func (b *Broker) Start(ctx context.Context) error {
 	// Create TCP listener
 	tcp := listeners.NewTCP(listeners.Config{
 		ID:      "t1",
-		Address: fmt.Sprintf(":%d", b.config.Port),
+		Address: fmt.Sprintf(":%d", b.config.Broker.Port),
 	})
 	if err := b.server.AddListener(tcp); err != nil {
 		return fmt.Errorf("failed to add TCP listener: %w", err)
+	}
+
+	// Register with service registry if configured
+	if b.config.Discovery.Address != "" {
+		instance := &discovery.ServiceInstance{
+			ID:   fmt.Sprintf("mqtt-broker-%s", uuid.New().String()),
+			Name: "mqtt-broker",
+			Host: "localhost", // TODO: Make configurable
+			Port: b.config.Broker.Port,
+			Metadata: map[string]string{
+				"version": "1.0.0",
+			},
+		}
+
+		if err := b.registry.Register(ctx, instance); err != nil {
+			return fmt.Errorf("failed to register with service registry: %w", err)
+		}
+
+		// Deregister on shutdown
+		go func() {
+			<-ctx.Done()
+			if err := b.registry.Deregister(ctx, instance.ID); err != nil {
+				b.logger.Error("Failed to deregister from service registry", err)
+			}
+		}()
 	}
 
 	// Start server
@@ -99,14 +197,8 @@ func (b *Broker) Start(ctx context.Context) error {
 	}
 
 	b.logger.Info("MQTT broker started", map[string]interface{}{
-		"port": b.config.Port,
+		"port": b.config.Broker.Port,
 	})
-
-	// Wait for context cancellation
-	go func() {
-		<-ctx.Done()
-		b.Stop()
-	}()
 
 	return nil
 }
@@ -129,17 +221,43 @@ func (b *Broker) RegisterHandler(handler handlers.MessageHandler) {
 
 // initializeHandlers initializes default message handlers
 func (b *Broker) initializeHandlers() error {
+	// Create server instance for handlers
+	server := &mqttServer{
+		server: b.server,
+	}
+
+	// Initialize handlers with server instance
 	handlers := []handlers.MessageHandler{
-		handlers.NewAuthHandler(b),
-		handlers.NewControlHandler(b),
-		handlers.NewDataHandler(b),
+		handlers.NewAuthHandler(server),
+		handlers.NewControlHandler(server),
+		handlers.NewDataHandler(server),
+		handlers.NewStatusHandler(server),
 	}
 
 	for _, handler := range handlers {
 		b.RegisterHandler(handler)
 	}
 
+	// Add event hook for message handling
+	eventHook := hooks.NewEventHook()
+	for _, handler := range b.handlers {
+		eventHook.RegisterHandler(handler)
+	}
+	if err := b.server.AddHook(eventHook, nil); err != nil {
+		return fmt.Errorf("failed to add event hook: %w", err)
+	}
+
 	return nil
+}
+
+// mqttServer implements the handlers.Server interface
+type mqttServer struct {
+	server *mqtt.Server
+}
+
+// Publish publishes a message to a topic
+func (s *mqttServer) Publish(clientID, topic string, payload []byte, qos byte, retain bool) {
+	s.server.Publish(topic, payload, retain, qos)
 }
 
 // GetMetrics returns broker metrics
@@ -185,11 +303,6 @@ func (b *Broker) GetTopics() []string {
 	return topics
 }
 
-// Publish publishes a message to a topic
-func (b *Broker) Publish(clientID, topic string, payload []byte, qos byte, retain bool) {
-	b.server.Publish(topic, payload, retain, qos)
-}
-
 // AddListener adds a listener to the server
 func (b *Broker) AddListener(listener interface{}) error {
 	if l, ok := listener.(listeners.Listener); ok {
@@ -210,7 +323,7 @@ func (b *Broker) Close() {
 
 // AddHook adds a hook to the server
 func (b *Broker) AddHook(hook interface{}, config interface{}) error {
-	if h, ok := hook.(mqttserver.Hook); ok {
+	if h, ok := hook.(mqtt.Hook); ok {
 		return b.server.AddHook(h, config)
 	}
 	return fmt.Errorf("invalid hook type")

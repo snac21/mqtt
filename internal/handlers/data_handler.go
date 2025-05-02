@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"github.com/mochi-mqtt/server/v2/packets"
+	"fmt"
+
 	pb "github.com/snac21/mqtt/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
 
 // DataHandler handles data messages
 type DataHandler struct {
-	*BaseHandler
+	BaseHandler
 }
 
 // NewDataHandler creates a new data handler
 func NewDataHandler(server Server) *DataHandler {
 	return &DataHandler{
-		BaseHandler: NewBaseHandler(server),
+		BaseHandler: *NewBaseHandler(server),
 	}
 }
 
@@ -24,44 +25,23 @@ func (h *DataHandler) Type() string {
 }
 
 // Handle processes a data message
-func (h *DataHandler) Handle(clientID string, packet packets.Packet) error {
-	// Parse base message
-	var baseMsg pb.BaseMessage
-	if err := proto.Unmarshal(packet.Payload, &baseMsg); err != nil {
-		return err
-	}
-
+func (h *DataHandler) Handle(clientID string, baseMsg *pb.BaseMessage) error {
 	// Parse data message
 	var dataMsg pb.DataMessage
 	if err := proto.Unmarshal(baseMsg.Payload, &dataMsg); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal data message: %w", err)
 	}
 
-	// Process data message
-	// TODO: Implement actual data processing logic
-
-	// Create and publish response
-	response := &pb.DataMessage{
+	// Create response message
+	response := &pb.BaseMessage{
 		ClientId:  clientID,
-		DataType:  dataMsg.DataType,
-		Payload:   dataMsg.Payload,
-		Metadata:  dataMsg.Metadata,
-		Timestamp: dataMsg.Timestamp,
+		Type:      "data_ack",
+		Timestamp: baseMsg.Timestamp,
+		Metadata: map[string]string{
+			"data_type": dataMsg.DataType,
+		},
 	}
 
-	// Create base message for response
-	baseResp := &pb.BaseMessage{
-		ClientId:  clientID,
-		Timestamp: dataMsg.Timestamp,
-		Type:      "data",
-	}
-
-	// Marshal data response
-	dataPayload, err := proto.Marshal(response)
-	if err != nil {
-		return err
-	}
-	baseResp.Payload = dataPayload
-
-	return h.PublishResponse(clientID, "data/response", baseResp, packet.FixedHeader.Qos, packet.FixedHeader.Retain)
+	// Publish response
+	return h.PublishResponse(clientID, fmt.Sprintf("response/%s", clientID), response, 0, false)
 }

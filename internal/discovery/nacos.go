@@ -24,13 +24,11 @@ func NewNacosRegistry(config *config.NacosConfig) (*NacosRegistry, error) {
 		return nil, fmt.Errorf("nacos config is required")
 	}
 
-	// Create server configs
-	serverConfigs := []constant.ServerConfig{
-		{
-			IpAddr: config.ServerAddr,
-			Port:   8848,
-		},
-	}
+	// Create server config
+	serverConfig := []constant.ServerConfig{{
+		IpAddr: config.ServerAddr,
+		Port:   8848,
+	}}
 
 	// Create client config
 	clientConfig := constant.ClientConfig{
@@ -47,7 +45,7 @@ func NewNacosRegistry(config *config.NacosConfig) (*NacosRegistry, error) {
 	client, err := clients.NewNamingClient(
 		vo.NacosClientParam{
 			ClientConfig:  &clientConfig,
-			ServerConfigs: serverConfigs,
+			ServerConfigs: serverConfig,
 		},
 	)
 	if err != nil {
@@ -61,7 +59,7 @@ func NewNacosRegistry(config *config.NacosConfig) (*NacosRegistry, error) {
 }
 
 // Register registers a service instance with Nacos
-func (r *NacosRegistry) Register(ctx context.Context, instance *config.ServiceInstance) error {
+func (r *NacosRegistry) Register(ctx context.Context, instance *ServiceInstance) error {
 	param := vo.RegisterInstanceParam{
 		Ip:          instance.Host,
 		Port:        uint64(instance.Port),
@@ -69,7 +67,6 @@ func (r *NacosRegistry) Register(ctx context.Context, instance *config.ServiceIn
 		Weight:      10,
 		Enable:      true,
 		Healthy:     true,
-		Ephemeral:   true,
 		Metadata:    instance.Metadata,
 		GroupName:   r.config.Group,
 	}
@@ -79,7 +76,7 @@ func (r *NacosRegistry) Register(ctx context.Context, instance *config.ServiceIn
 		return fmt.Errorf("failed to register instance: %w", err)
 	}
 	if !success {
-		return fmt.Errorf("failed to register instance: registration failed")
+		return fmt.Errorf("failed to register instance")
 	}
 
 	return nil
@@ -89,9 +86,9 @@ func (r *NacosRegistry) Register(ctx context.Context, instance *config.ServiceIn
 func (r *NacosRegistry) Deregister(ctx context.Context, instanceID string) error {
 	param := vo.DeregisterInstanceParam{
 		Ip:          instanceID,
-		ServiceName: r.config.Group,
+		Port:        0,
+		ServiceName: "mqtt-broker",
 		GroupName:   r.config.Group,
-		Ephemeral:   true,
 	}
 
 	success, err := r.client.DeregisterInstance(param)
@@ -99,14 +96,14 @@ func (r *NacosRegistry) Deregister(ctx context.Context, instanceID string) error
 		return fmt.Errorf("failed to deregister instance: %w", err)
 	}
 	if !success {
-		return fmt.Errorf("failed to deregister instance: deregistration failed")
+		return fmt.Errorf("failed to deregister instance")
 	}
 
 	return nil
 }
 
 // GetService returns all instances of a service from Nacos
-func (r *NacosRegistry) GetService(ctx context.Context, serviceName string) ([]*config.ServiceInstance, error) {
+func (r *NacosRegistry) GetService(ctx context.Context, serviceName string) ([]*ServiceInstance, error) {
 	param := vo.GetServiceParam{
 		ServiceName: serviceName,
 		GroupName:   r.config.Group,
@@ -117,9 +114,9 @@ func (r *NacosRegistry) GetService(ctx context.Context, serviceName string) ([]*
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	instances := make([]*config.ServiceInstance, 0, len(service.Hosts))
+	instances := make([]*ServiceInstance, 0, len(service.Hosts))
 	for _, host := range service.Hosts {
-		instances = append(instances, &config.ServiceInstance{
+		instances = append(instances, &ServiceInstance{
 			ID:       host.InstanceId,
 			Name:     serviceName,
 			Host:     host.Ip,
@@ -131,9 +128,9 @@ func (r *NacosRegistry) GetService(ctx context.Context, serviceName string) ([]*
 	return instances, nil
 }
 
-// Watch watches for service changes in Nacos
-func (r *NacosRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*config.ServiceInstance, error) {
-	ch := make(chan []*config.ServiceInstance, 10)
+// Watch watches for service changes
+func (r *NacosRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*ServiceInstance, error) {
+	ch := make(chan []*ServiceInstance, 10)
 
 	param := &vo.SubscribeParam{
 		ServiceName: serviceName,
@@ -143,9 +140,9 @@ func (r *NacosRegistry) Watch(ctx context.Context, serviceName string) (<-chan [
 				return
 			}
 
-			instances := make([]*config.ServiceInstance, 0, len(services))
+			instances := make([]*ServiceInstance, 0, len(services))
 			for _, service := range services {
-				instances = append(instances, &config.ServiceInstance{
+				instances = append(instances, &ServiceInstance{
 					ID:       service.InstanceId,
 					Name:     serviceName,
 					Host:     service.Ip,

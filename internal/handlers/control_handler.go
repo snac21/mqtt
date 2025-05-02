@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"github.com/mochi-mqtt/server/v2/packets"
+	"fmt"
+
 	pb "github.com/snac21/mqtt/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
 
 // ControlHandler handles control messages
 type ControlHandler struct {
-	*BaseHandler
+	BaseHandler
 }
 
 // NewControlHandler creates a new control handler
 func NewControlHandler(server Server) *ControlHandler {
 	return &ControlHandler{
-		BaseHandler: NewBaseHandler(server),
+		BaseHandler: *NewBaseHandler(server),
 	}
 }
 
@@ -24,42 +25,24 @@ func (h *ControlHandler) Type() string {
 }
 
 // Handle processes a control message
-func (h *ControlHandler) Handle(clientID string, packet packets.Packet) error {
-	// Parse base message
-	var baseMsg pb.BaseMessage
-	if err := proto.Unmarshal(packet.Payload, &baseMsg); err != nil {
-		return err
-	}
-
+func (h *ControlHandler) Handle(clientID string, baseMsg *pb.BaseMessage) error {
 	// Parse control message
 	var controlMsg pb.ControlMessage
 	if err := proto.Unmarshal(baseMsg.Payload, &controlMsg); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal control message: %w", err)
 	}
 
-	// Process control request
-	// TODO: Implement actual control logic
-
-	// Create and publish response
-	response := &pb.ControlMessage{
-		Command:   controlMsg.Command,
-		Status:    "executed",
-		Timestamp: controlMsg.Timestamp,
-	}
-
-	// Create base message for response
-	baseResp := &pb.BaseMessage{
+	// Create response message
+	response := &pb.BaseMessage{
 		ClientId:  clientID,
-		Timestamp: controlMsg.Timestamp,
-		Type:      "control",
+		Type:      "control_ack",
+		Timestamp: baseMsg.Timestamp,
+		Metadata: map[string]string{
+			"command": controlMsg.Command,
+			"status":  controlMsg.Status,
+		},
 	}
 
-	// Marshal control response
-	controlPayload, err := proto.Marshal(response)
-	if err != nil {
-		return err
-	}
-	baseResp.Payload = controlPayload
-
-	return h.PublishResponse(clientID, "control/response", baseResp, packet.FixedHeader.Qos, packet.FixedHeader.Retain)
+	// Publish response
+	return h.PublishResponse(clientID, fmt.Sprintf("response/%s", clientID), response, 0, false)
 }

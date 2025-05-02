@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"github.com/mochi-mqtt/server/v2/packets"
+	"fmt"
+
 	pb "github.com/snac21/mqtt/pkg/proto"
 	"google.golang.org/protobuf/proto"
 )
 
 // AuthHandler handles authentication messages
 type AuthHandler struct {
-	*BaseHandler
+	BaseHandler
 }
 
-// NewAuthHandler creates a new authentication handler
+// NewAuthHandler creates a new auth handler
 func NewAuthHandler(server Server) *AuthHandler {
 	return &AuthHandler{
-		BaseHandler: NewBaseHandler(server),
+		BaseHandler: *NewBaseHandler(server),
 	}
 }
 
@@ -23,43 +24,24 @@ func (h *AuthHandler) Type() string {
 	return "auth"
 }
 
-// Handle processes an authentication message
-func (h *AuthHandler) Handle(clientID string, packet packets.Packet) error {
-	// Parse base message
-	var baseMsg pb.BaseMessage
-	if err := proto.Unmarshal(packet.Payload, &baseMsg); err != nil {
-		return err
-	}
-
+// Handle processes an auth message
+func (h *AuthHandler) Handle(clientID string, baseMsg *pb.BaseMessage) error {
 	// Parse auth message
 	var authMsg pb.AuthMessage
 	if err := proto.Unmarshal(baseMsg.Payload, &authMsg); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal auth message: %w", err)
 	}
 
-	// Process authentication request
-	// TODO: Implement actual authentication logic
-
-	// Create and publish response
-	response := &pb.AuthMessage{
-		Username:  authMsg.Username,
-		Success:   true,
-		Timestamp: authMsg.Timestamp,
-	}
-
-	// Create base message for response
-	baseResp := &pb.BaseMessage{
+	// Create response message
+	response := &pb.BaseMessage{
 		ClientId:  clientID,
-		Timestamp: authMsg.Timestamp,
-		Type:      "auth",
+		Type:      "auth_ack",
+		Timestamp: baseMsg.Timestamp,
+		Metadata: map[string]string{
+			"success": fmt.Sprintf("%v", authMsg.Success),
+		},
 	}
 
-	// Marshal auth response
-	authPayload, err := proto.Marshal(response)
-	if err != nil {
-		return err
-	}
-	baseResp.Payload = authPayload
-
-	return h.PublishResponse(clientID, "auth/response", baseResp, packet.FixedHeader.Qos, packet.FixedHeader.Retain)
+	// Publish response
+	return h.PublishResponse(clientID, fmt.Sprintf("response/%s", clientID), response, 0, false)
 }

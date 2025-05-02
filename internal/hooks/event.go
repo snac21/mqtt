@@ -1,12 +1,14 @@
 package hooks
 
 import (
-	"strings"
+	"fmt"
 	"sync"
 
 	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/packets"
 	"github.com/snac21/mqtt/internal/handlers"
+	pb "github.com/snac21/mqtt/pkg/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // EventHook implements the mqtt.Hook interface for message handling
@@ -40,12 +42,23 @@ func (h *EventHook) OnConnect(cl *mqtt.Client, pk packets.Packet) error {
 
 // OnPublish handles published messages
 func (h *EventHook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, error) {
-	msgType := h.getMessageType(pk.TopicName)
-	if handler, ok := h.getHandler(msgType); ok {
-		if err := handler.Handle(cl.ID, pk); err != nil {
-			return pk, err
-		}
+	// Parse base message
+	var baseMsg pb.BaseMessage
+	if err := proto.Unmarshal(pk.Payload, &baseMsg); err != nil {
+		return pk, fmt.Errorf("failed to unmarshal base message from client %s: %w", cl.ID, err)
 	}
+
+	// Get handler for message type
+	handler, ok := h.getHandler(baseMsg.Type)
+	if !ok {
+		return pk, fmt.Errorf("no handler found for message type %s from client %s", baseMsg.Type, cl.ID)
+	}
+
+	// Handle message
+	if err := handler.Handle(cl.ID, &baseMsg); err != nil {
+		return pk, fmt.Errorf("failed to handle message type %s from client %s: %w", baseMsg.Type, cl.ID, err)
+	}
+
 	return pk, nil
 }
 
@@ -82,13 +95,4 @@ func (h *EventHook) getHandler(msgType string) (handlers.MessageHandler, bool) {
 	defer h.mu.RUnlock()
 	handler, ok := h.handlers[msgType]
 	return handler, ok
-}
-
-// getMessageType extracts the message type from the topic
-func (h *EventHook) getMessageType(topic string) string {
-	parts := strings.Split(topic, "/")
-	if len(parts) > 0 {
-		return parts[0]
-	}
-	return ""
 }

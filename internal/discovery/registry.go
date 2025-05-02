@@ -13,7 +13,7 @@ type ServiceInstance struct {
 	Metadata map[string]string
 }
 
-// Registry defines the interface for service registration
+// Registry defines the interface for service registration and discovery
 type Registry interface {
 	// Register registers a service instance
 	Register(ctx context.Context, instance *ServiceInstance) error
@@ -26,32 +26,4 @@ type Registry interface {
 
 	// Watch watches for service changes
 	Watch(ctx context.Context, serviceName string) (<-chan []*ServiceInstance, error)
-}
-
-// Config represents the configuration for service registration
-type Config struct {
-	// Type is the type of registry (nacos, consul)
-	Type string
-
-	// NacosConfig is the configuration for Nacos
-	NacosConfig *NacosConfig
-
-	// ConsulConfig is the configuration for Consul
-	ConsulConfig *ConsulConfig
-}
-
-// NacosConfig represents the configuration for Nacos
-type NacosConfig struct {
-	ServerAddr string
-	Namespace  string
-	Group      string
-	Username   string
-	Password   string
-}
-
-// ConsulConfig represents the configuration for Consul
-type ConsulConfig struct {
-	Address string
-	Token   string
-	Scheme  string
 }

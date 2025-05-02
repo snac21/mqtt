@@ -15,7 +15,7 @@ type Router struct {
 	mu       sync.RWMutex
 }
 
-// NewRouter creates a new message router
+// NewRouter creates a new router instance
 func NewRouter() *Router {
 	return &Router{
 		handlers: make(map[string]MessageHandler),
@@ -47,5 +47,5 @@ func (r *Router) Handle(clientID string, packet packets.Packet) error {
 	}
 
 	// Process message with handler
-	return handler.Handle(clientID, packet)
+	return handler.Handle(clientID, &baseMsg)
 }

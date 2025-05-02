@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/snac21/mqtt/internal/config"
@@ -21,14 +20,13 @@ func NewConsulRegistry(config *config.ConsulConfig) (*ConsulRegistry, error) {
 		return nil, fmt.Errorf("consul config is required")
 	}
 
-	// Create consul config
-	consulConfig := api.DefaultConfig()
-	consulConfig.Address = config.Address
-	consulConfig.Token = config.Token
-	consulConfig.Scheme = config.Scheme
+	// Create consul client config
+	clientConfig := api.DefaultConfig()
+	clientConfig.Address = config.Address
+	clientConfig.Token = config.Token
 
 	// Create consul client
-	client, err := api.NewClient(consulConfig)
+	client, err := api.NewClient(clientConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consul client: %w", err)
 	}
@@ -40,7 +38,7 @@ func NewConsulRegistry(config *config.ConsulConfig) (*ConsulRegistry, error) {
 }
 
 // Register registers a service instance with Consul
-func (r *ConsulRegistry) Register(ctx context.Context, instance *config.ServiceInstance) error {
+func (r *ConsulRegistry) Register(ctx context.Context, instance *ServiceInstance) error {
 	registration := &api.AgentServiceRegistration{
 		ID:      instance.ID,
 		Name:    instance.Name,
@@ -73,15 +71,15 @@ func (r *ConsulRegistry) Deregister(ctx context.Context, instanceID string) erro
 }
 
 // GetService returns all instances of a service from Consul
-func (r *ConsulRegistry) GetService(ctx context.Context, serviceName string) ([]*config.ServiceInstance, error) {
+func (r *ConsulRegistry) GetService(ctx context.Context, serviceName string) ([]*ServiceInstance, error) {
 	services, _, err := r.client.Health().Service(serviceName, "", true, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	instances := make([]*config.ServiceInstance, 0, len(services))
+	instances := make([]*ServiceInstance, 0, len(services))
 	for _, service := range services {
-		instances = append(instances, &config.ServiceInstance{
+		instances = append(instances, &ServiceInstance{
 			ID:       service.Service.ID,
 			Name:     service.Service.Service,
 			Host:     service.Service.Address,
@@ -93,22 +91,19 @@ func (r *ConsulRegistry) GetService(ctx context.Context, serviceName string) ([]
 	return instances, nil
 }
 
-// Watch watches for service changes in Consul
-func (r *ConsulRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*config.ServiceInstance, error) {
-	ch := make(chan []*config.ServiceInstance, 10)
+// Watch watches for service changes
+func (r *ConsulRegistry) Watch(ctx context.Context, serviceName string) (<-chan []*ServiceInstance, error) {
+	ch := make(chan []*ServiceInstance, 10)
 
-	// Start a goroutine to poll for service changes
+	// Start a goroutine to watch for changes
 	go func() {
-		var lastIndex uint64
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-
+		lastIndex := uint64(0)
 		for {
 			select {
 			case <-ctx.Done():
 				close(ch)
 				return
-			case <-ticker.C:
+			default:
 				services, meta, err := r.client.Health().Service(serviceName, "", true, &api.QueryOptions{
 					WaitIndex: lastIndex,
 				})
@@ -116,26 +111,24 @@ func (r *ConsulRegistry) Watch(ctx context.Context, serviceName string) (<-chan 
 					continue
 				}
 
-				if meta.LastIndex <= lastIndex {
-					continue
-				}
+				if meta.LastIndex > lastIndex {
+					lastIndex = meta.LastIndex
+					instances := make([]*ServiceInstance, 0, len(services))
+					for _, service := range services {
+						instances = append(instances, &ServiceInstance{
+							ID:       service.Service.ID,
+							Name:     service.Service.Service,
+							Host:     service.Service.Address,
+							Port:     service.Service.Port,
+							Metadata: service.Service.Meta,
+						})
+					}
 
-				lastIndex = meta.LastIndex
-				instances := make([]*config.ServiceInstance, 0, len(services))
-				for _, service := range services {
-					instances = append(instances, &config.ServiceInstance{
-						ID:       service.Service.ID,
-						Name:     service.Service.Service,
-						Host:     service.Service.Address,
-						Port:     service.Service.Port,
-						Metadata: service.Service.Meta,
-					})
-				}
-
-				select {
-				case ch <- instances:
-				default:
-					// Channel is full, skip this update
+					select {
+					case ch <- instances:
+					default:
+						// Channel is full, skip this update
+					}
 				}
 			}
 		}

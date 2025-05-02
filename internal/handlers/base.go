@@ -1,9 +1,8 @@
 package handlers
 
 import (
+	pb "github.com/snac21/mqtt/pkg/proto"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/mochi-mqtt/server/v2/packets"
 )
 
 // MessageHandler defines the interface for message handlers
@@ -12,10 +11,10 @@ type MessageHandler interface {
 	Type() string
 
 	// Handle processes a message
-	Handle(clientID string, packet packets.Packet) error
+	Handle(clientID string, baseMsg *pb.BaseMessage) error
 
 	// PublishResponse publishes a response message
-	PublishResponse(clientID, topic string, msg proto.Message, qos byte, retain bool) error
+	PublishResponse(clientID, topic string, msg *pb.BaseMessage, qos byte, retain bool) error
 }
 
 // Server defines the interface for MQTT server operations
@@ -37,7 +36,7 @@ func NewBaseHandler(server Server) *BaseHandler {
 }
 
 // PublishResponse publishes a response message
-func (h *BaseHandler) PublishResponse(clientID, topic string, msg proto.Message, qos byte, retain bool) error {
+func (h *BaseHandler) PublishResponse(clientID, topic string, msg *pb.BaseMessage, qos byte, retain bool) error {
 	payload, err := proto.Marshal(msg)
 	if err != nil {
 		return err
